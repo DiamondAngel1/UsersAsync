@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using MyMvcApp.Models;
 using MyMvcApp.Data;
 using System.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 namespace MyMvcApp.Controllers;
 
 public class HomeController : Controller
@@ -33,19 +35,37 @@ public class HomeController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(User user, IFormFile Image)
+    public async Task<IActionResult> Create(User user, IFormFile image)
     {
-        if (Image != null && Image.Length > 0){
+        if (image != null && image.Length > 0){
             var folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images");
             if (!Directory.Exists(folderPath)){
                 Directory.CreateDirectory(folderPath);
             }
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(Image.FileName);
-            var filePath = Path.Combine(folderPath, fileName);
-            using (var fileStream = new FileStream(filePath, FileMode.Create)){
-                await Image.CopyToAsync(fileStream);
+            var fileName = Guid.NewGuid().ToString() ;
+            
+
+            using var stream = image.OpenReadStream();
+            using var newImage = await Image.LoadAsync(stream);
+
+            var sizes = new[] { 100, 200, 400, 600, 800, 1200 };
+            foreach (var size in sizes)
+            {
+                var resized = newImage.Clone(x => x.Resize(new ResizeOptions
+                {
+                    Size = new Size(size, size),
+                    Mode = ResizeMode.Max
+                }));
+                var fileName2 = $"{fileName}_{size}px.webp";
+                var filePath = Path.Combine(folderPath, fileName2);
+                using (var output = System.IO.File.Create(filePath))
+                {
+                    await resized.SaveAsWebpAsync(output);
+                }
+
             }
-            user.Image = fileName;
+            user.Image = $"{fileName}_100px.webp";
+
         }
         await _context.AddAsync(user);
         await _context.SaveChangesAsync();
